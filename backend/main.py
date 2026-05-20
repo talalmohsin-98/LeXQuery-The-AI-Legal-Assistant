@@ -7,7 +7,7 @@ from typing import List
 
 app = FastAPI(
     title="LeXQuery - AI Legal Assistant",
-    description="A RAG-based legal document Q&A system for Pakistan",
+    description="Developed by Muhammad Talal Mohsin",
     version="1.0.0"
 )
 
