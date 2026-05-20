@@ -103,13 +103,19 @@ def get_answer(question: str) -> dict:
 
     # Return result
     return {
-        "answer": response.content,
-        "sources": [r.metadata for r in results]
+    "answer": response.content,
+    "sources": [
+        {
+            "source": Path(r.metadata['source']).name,
+            "page": r.metadata['page']
+        }
+            for r in results
+        ]
     }
 
 if __name__ == "__main__":
-    questions = "Can a woman file a case for harassment?"
-    enhanced = rewrite_query(questions)
+    questions = ["Can a woman file a case for harassment?"]
+    enhanced = rewrite_query(questions[0])
     print(f"Enhanced query: {enhanced}")
     for question in questions:
         result = get_answer(question)
