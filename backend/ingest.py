@@ -55,11 +55,8 @@ else:
     for pdf in DATA_DIR.glob("*.pdf"):
 
         loader = PyPDFLoader(str(pdf))
-
         print(f"{pdf.name} Loaded!")
-
         docs = loader.load()
-
         all_docs.extend(docs)
 
     # =========================
@@ -72,6 +69,10 @@ else:
     )
 
     final_docs = text_splitter.split_documents(all_docs)
+
+    final_docs = [doc for doc in final_docs if doc.page_content.count("Ditto") < 5]
+
+    print(f"Chunks after filtering: {len(final_docs)}")
 
     print(f"Total pages loaded: {len(all_docs)}")
     print(f"Total chunks created: {len(final_docs)}")
@@ -87,27 +88,3 @@ else:
     )
 
     print("ChromaDB Created and Saved!")
-
-# =========================
-# SIMILARITY SEARCH
-# =========================
-
-query = "What is the punishment for murder in Pakistan?"
-
-results = db.similarity_search(query, k=3)
-
-# =========================
-# PRINT RESULTS
-# =========================
-
-print("\nSimilarity Search Results:\n")
-
-for i, result in enumerate(results, start=1):
-
-    print(f"\nResult {i}")
-    print("-" * 50)
-
-    print(result.page_content[:1000])
-
-    print("\nMetadata:")
-    print(result.metadata)
