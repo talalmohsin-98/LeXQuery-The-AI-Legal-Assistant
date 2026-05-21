@@ -1,14 +1,12 @@
-# importing Required Modules
-
-import os
-from dotenv import load_dotenv
-from langchain_community.document_loaders import PyPDFLoader
-from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_openai import OpenAIEmbeddings
-from langchain_community.vectorstores import Chroma
+import re
 from pathlib import Path
+from dotenv import load_dotenv
 
-# loading .env file
+from langchain_community.document_loaders import PyPDFLoader
+from langchain_openai import OpenAIEmbeddings
+from langchain_chroma import Chroma
+from langchain_core.documents import Document
+
 load_dotenv()
 
 # =========================
@@ -16,12 +14,11 @@ load_dotenv()
 # =========================
 
 BASE_DIR = Path(__file__).parent.parent
-
 DATA_DIR = BASE_DIR / "data"
 CHROMA_DIR = BASE_DIR / "chroma_db"
 
 # =========================
-# EMBEDDING MODEL
+# EMBEDDINGS
 # =========================
 
 embeddings = OpenAIEmbeddings(
@@ -29,62 +26,101 @@ embeddings = OpenAIEmbeddings(
 )
 
 # =========================
-# CHECK IF CHROMA DB EXISTS
+# CLEAN TEXT
 # =========================
 
-if CHROMA_DIR.exists():
+def clean_text(text: str) -> str:
 
-    print("Loading Existing ChromaDB...")
+    text = re.sub(r'\s+', ' ', text)
+    text = text.replace("\x0c", " ")
+    text = text.strip()
 
-    # Load existing DB from disk
-    db = Chroma(
-        persist_directory=str(CHROMA_DIR),
-        embedding_function=embeddings
-    )
+    return text
 
-else:
+# =========================
+# SECTION BASED SPLITTING
+# =========================
 
-    print("Creating ChromaDB for first time...")
+def split_legal_sections(text: str):
 
-    # =========================
-    # LOAD PDF FILES
-    # =========================
+    pattern = r'(\b\d+[A-Z]?\.\s+[A-Z][^\.\n]+)'
 
-    all_docs = []
+    matches = list(re.finditer(pattern, text))
 
-    for pdf in DATA_DIR.glob("*.pdf"):
+    sections = []
 
-        loader = PyPDFLoader(str(pdf))
-        print(f"{pdf.name} Loaded!")
-        docs = loader.load()
-        all_docs.extend(docs)
+    for i in range(len(matches)):
 
-    # =========================
-    # TEXT SPLITTING
-    # =========================
+        start = matches[i].start()
 
-    text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=1000,
-        chunk_overlap=200
-    )
+        if i + 1 < len(matches):
+            end = matches[i + 1].start()
+        else:
+            end = len(text)
 
-    final_docs = text_splitter.split_documents(all_docs)
+        chunk = text[start:end].strip()
 
-    final_docs = [doc for doc in final_docs if doc.page_content.count("Ditto") < 5]
+        sections.append(chunk)
 
-    print(f"Chunks after filtering: {len(final_docs)}")
+    return sections
 
-    print(f"Total pages loaded: {len(all_docs)}")
-    print(f"Total chunks created: {len(final_docs)}")
+# =========================
+# LOAD PDFS
+# =========================
 
-    # =========================
-    # CREATE CHROMA DB
-    # =========================
+all_documents = []
 
-    db = Chroma.from_documents(
-        documents=final_docs,
-        embedding=embeddings,
-        persist_directory=str(CHROMA_DIR)
-    )
+for pdf in DATA_DIR.glob("*.pdf"):
 
-    print("ChromaDB Created and Saved!")
+    print(f"Loading {pdf.name}...")
+
+    loader = PyPDFLoader(str(pdf))
+    pages = loader.load()
+
+    for page in pages:
+
+        cleaned = clean_text(page.page_content)
+
+        sections = split_legal_sections(cleaned)
+
+        for section_text in sections:
+
+            # Extract section number
+            section_match = re.search(r'^(\d+[A-Z]?)\.', section_text)
+
+            section_number = (
+                section_match.group(1)
+                if section_match else "Unknown"
+            )
+
+            # Extract title
+            title_match = re.search(
+                r'^\d+[A-Z]?\.\s+([^\.]+)',
+                section_text
+            )
+
+            title = (
+                title_match.group(1).strip()
+                if title_match else "Unknown"
+            )
+
+            doc = Document(
+                page_content=section_text,
+                metadata={
+                    "source": pdf.name,
+                    "page": page.metadata.get("page", 0),
+                    "section": section_number,
+                    "title": title,
+                    "act": pdf.stem.upper()
+                }
+            )
+
+            all_documents.append(doc)
+
+print(f"Total legal chunks created: {len(all_documents)}")
+
+# =========================
+# CREATE CHROMADB
+# =========================
+
+print("Legal ChromaDB created successfully!")
