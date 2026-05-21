@@ -105,10 +105,10 @@ def get_answer(question: str) -> dict:
     return {
     "answer": response.content,
     "sources": [
-        {
-            "source": Path(r.metadata['source']).name,
-            "page": r.metadata['page']
-        }
+            {
+                "source": Path(r.metadata['source']).name,
+                "page": r.metadata['page']
+            }
             for r in results
         ]
     }
